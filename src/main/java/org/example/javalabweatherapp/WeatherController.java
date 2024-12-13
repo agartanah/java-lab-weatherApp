@@ -95,21 +95,28 @@ public class WeatherController implements Initializable {
 
         cityInput.addEventHandler(KeyEvent.KEY_RELEASED, keyEvent -> {
             String city = cityInput.getText().toLowerCase();
+            Task<SearchCity> searchCityTask = null;
 
-            Task<SearchCity> searchCityTask = new Task<>() {
-                @Override
-                protected SearchCity call() throws IncorrectTypeRequest, NullRequest, ReceivingResponseException {
-                    return WeatherApi.getSearchCity(new SearchRequest(
-                            city,
-                            "5",  // Максимальное количество результатов
-                            properties.getProperty("apikey")
-                    ));
-                }
-            };
+            try {
+                searchCityTask = new Task<>() {
+                    @Override
+                    protected SearchCity call() throws IncorrectTypeRequest, NullRequest, ReceivingResponseException {
+                        return WeatherApi.getSearchCity(new SearchRequest(
+                                city,
+                                "5",  // Максимальное количество результатов
+                                properties.getProperty("apikey")
+                        ));
+                    }
+                };
+            } catch (Exception e) {
+                logger.error("Ошибка в поиске городов: {}", e.getMessage());
+            }
 
+
+            Task<SearchCity> finalSearchCityTask = searchCityTask;
             searchCityTask.setOnSucceeded(event -> {
                 try {
-                    SearchCity searchCity = searchCityTask.get();
+                    SearchCity searchCity = finalSearchCityTask.get();
 
                     if (!city.isEmpty()) {
                         ObservableList<String> citiesNames = FXCollections.observableArrayList(
@@ -133,29 +140,34 @@ public class WeatherController implements Initializable {
                 } catch (Exception e) {
                     // Обработка исключений, выброшенных в потоке Task
                     if (e.getCause() instanceof IncorrectTypeRequest) {
-                        temperatureLabel.setText(e.getCause().getMessage());
+                        logger.error(e.getCause().getMessage());
                     } else if (e.getCause() instanceof NullRequest) {
-                        temperatureLabel.setText(e.getCause().getMessage());
+                        logger.error(e.getCause().getMessage());
                     } else if (e.getCause() instanceof ReceivingResponseException) {
-                        temperatureLabel.setText(e.getCause().getMessage());
+                        logger.error(e.getCause().getMessage());
                     } else {
                         logger.error(e.getCause().getMessage());
-                        temperatureLabel.setText("Ошибка выполнения потока: " + e.getMessage());
                     }
                 }
             });
 
+            Task<SearchCity> finalSearchCityTask1 = searchCityTask;
             searchCityTask.setOnFailed(event -> {
-                Throwable exception = searchCityTask.getException();
+                Throwable exception = finalSearchCityTask1.getException();
                 if (exception != null) {
-                    if (exception instanceof IncorrectTypeRequest) {
-                        temperatureLabel.setText(exception.getMessage());
-                    } else if (exception instanceof NullRequest) {
-                        temperatureLabel.setText(exception.getMessage());
-                    } else if (exception instanceof ReceivingResponseException) {
-                        temperatureLabel.setText(exception.getMessage());
-                    } else {
-                        temperatureLabel.setText("Ошибка выполнения потока: " + exception.getMessage());
+                    switch (exception) {
+                        case IncorrectTypeRequest incorrectTypeRequest -> {
+                            logger.error(exception.getMessage());
+                            cityLabel.setText("Некорректный тип запроса");
+                        }
+                        case NullRequest nullRequest -> {
+                            logger.error(exception.getMessage());
+                            cityLabel.setText("Запрос оказался нулевым");
+                        }
+                        case ReceivingResponseException receivingResponseException -> {
+                            logger.error(exception.getMessage());
+                        }
+                        default -> cityLabel.setText("Ошибка выполнения потока");
                     }
                 }
             });
@@ -199,34 +211,39 @@ public class WeatherController implements Initializable {
             return;
         }
 
-        try {
-            fetchWeatherData(city);
-        } catch (IncorrectTypeRequest e) {
-            temperatureLabel.setText(e.getMessage());
-            return;
-        } catch (NullRequest e) {
-            temperatureLabel.setText(e.getMessage());
-            return;
-        } catch (ReceivingResponseException e) {
-            temperatureLabel.setText(e.getMessage());
-            return;
-        }
+        fetchWeatherData(city);
 
-        try {
-            fetchWeatherFewDays(city);
-        } catch (IOException e) {
-            temperatureLabel.setText("Ошибка получения данных");
-        }
+
     }
 
     private void fetchWeatherData(String city) {
-        WeatherCity weatherCity = WeatherApi
-                .getWeather(new WeatherRequest(
-                        city,
-                        properties.getProperty("apikey"),
-                        properties.getProperty("units"),
-                        properties.getProperty("lang")
-                ));
+        WeatherCity weatherCity = null;
+
+        try {
+            weatherCity = WeatherApi
+                    .getWeather(new WeatherRequest(
+                            city,
+                            properties.getProperty("apikey"),
+                            properties.getProperty("units"),
+                            properties.getProperty("lang")
+                    ));
+        } catch (IncorrectTypeRequest e) {
+            logger.error(e.getMessage());
+            cityLabel.setText("Некорректный тип запроса");
+            return;
+        } catch (NullRequest e) {
+            logger.error(e.getMessage());
+            cityLabel.setText("Запрос оказался нулевым");
+            return;
+        } catch (ReceivingResponseException e) {
+            logger.error(e.getMessage());
+            cityLabel.setText("Ошибка получения ответа");
+            return;
+        }
+
+        if (weatherCity.getName() == null) {
+            return;
+        }
 
         weatherIcon.setImage(new Image(weatherCity.getWeather().getFirst().getIcon()));
         cityLabel.setText(city.substring(0, 1).toUpperCase() + city.substring(1).toLowerCase());
@@ -244,13 +261,21 @@ public class WeatherController implements Initializable {
         fewDaysContainer.getChildren().removeAll(listFewDays);
         listFewDays.clear();
 
-        WeatherFewDays weatherFewDays = WeatherApi
-                .getWeatherFewDays(new WeatherFewDaysRequest(
-                        city,
-                        properties.getProperty("apikey"),
-                        properties.getProperty("units"),
-                        properties.getProperty("lang")
-                ));
+        WeatherFewDays weatherFewDays = null;
+
+        try {
+            weatherFewDays = WeatherApi
+                    .getWeatherFewDays(new WeatherFewDaysRequest(
+                            city,
+                            properties.getProperty("apikey"),
+                            properties.getProperty("units"),
+                            properties.getProperty("lang")
+                    ));
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            cityLabel.setText("Ошибка получения");
+            return;
+        }
 
         List<WeatherDay> weatherDays =  weatherFewDays.getWeatherDays();
 
@@ -288,6 +313,11 @@ public class WeatherController implements Initializable {
             listFewDays.add(dayContainer);
         }
 
-        WeatherCityRepository.insertWeatherCity(city);
+        try {
+            WeatherCityRepository.insertWeatherCity(city);
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            cityLabel.setText("Ошибка отправки данных на сервер");
+        }
     }
 }

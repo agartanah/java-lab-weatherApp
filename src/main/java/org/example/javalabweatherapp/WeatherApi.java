@@ -6,7 +6,6 @@ import org.example.javalabweatherapp.data.api.Request;
 import org.example.javalabweatherapp.data.api.SearchRequest;
 import org.example.javalabweatherapp.data.api.WeatherFewDaysRequest;
 import org.example.javalabweatherapp.data.api.WeatherRequest;
-import org.example.javalabweatherapp.data.database.WeatherCityRepository;
 import org.example.javalabweatherapp.data.modal.City;
 import org.example.javalabweatherapp.data.modal.SearchCity;
 import org.example.javalabweatherapp.data.modal.WeatherCity;
